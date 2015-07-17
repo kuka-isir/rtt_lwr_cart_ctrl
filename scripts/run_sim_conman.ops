@@ -1,0 +1,36 @@
+// Start LWR SIMULATION
+import("rtt_ros")
+ros.import("rtt_rospack")
+
+runScript(ros.find("rtt_lwr_sim")+"/scripts/lwr_sim.ops")
+
+runScript(ros.find("rtt_lwr_cart_imp_ctrl")+"/scripts/run_sim.ops")
+
+// Load Conman
+loadComponent("scheme","conman::Scheme")
+setActivity("scheme",0.001,LowestPriority,ORO_SCHED_RT)
+scheme.loadService("conman_ros")
+
+connectPeers("scheme","lwr_sim")
+connectPeers("scheme","cart_imp_ctrl")
+
+scheme.addBlock("lwr_sim")
+scheme.addBlock("cart_imp_ctrl")
+
+
+scheme.addGroup("robots")
+scheme.addGroup("controllers")
+
+scheme.addToGroup("lwr_sim","robots")
+scheme.addToGroup("cart_imp_ctrl","controllers")
+
+scheme.latchConnections("robots","controllers",true);
+
+scheme.configure()
+
+
+scheme.enableBlock("robots",true)
+
+scheme.enableBlock("cart_imp_ctrl",true)
+
+scheme.start()
