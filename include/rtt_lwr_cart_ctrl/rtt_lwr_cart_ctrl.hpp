@@ -1,4 +1,4 @@
-// rtt_lwr_cart_imp_ctrl - ISIR Thu 02 Jul 2015 06:16:26 PM CEST
+// rtt_lwr_cart_ctrl - ISIR Thu 02 Jul 2015 06:16:26 PM CEST
 // Copyright (c) Antoine Hoarau, All rights reserved.
 //
 // This library is free software; you can redistribute it and/or
@@ -64,17 +64,16 @@ namespace KDL{
 namespace lwr{
   static const int PINV_SOLVER  =0;
   static const int WDL_SOLVER   =1;
-   
-  class RttLwrCartImpCtrl : public RTTLWRAbstract{
+
+  class RttLwrCartCtrl : public RTTLWRAbstract{
     public:
-      RttLwrCartImpCtrl(const std::string& name);
-      virtual ~RttLwrCartImpCtrl(){
+      RttLwrCartCtrl(const std::string& name);
+      virtual ~RttLwrCartCtrl(){
           delete ctraject;
     };
       bool computeTrajectory(const double radius,const double eqradius);
       void updateHook();
       bool configureHook();
-      void updateCartesianGains(const double kp_lin,const double kp_ang,const double kd_lin,const double kd_ang);
       RTT::OutputPort<geometry_msgs::PoseStamped> port_X_curr;
       RTT::OutputPort<geometry_msgs::PoseStamped> port_X_des;
       RTT::OutputPort<geometry_msgs::PoseStamped> port_X_tmp;
@@ -93,11 +92,11 @@ namespace lwr{
       KDL::JntArray jnt_acc_kdl;
       Eigen::Matrix<double,6,1> F_ext;
       KDL::Twist cart_twist_des_kdl;
-      
+
       flexmod12 flex_model_12;
       flexmod23 flex_model_23;
       flexmod42 flex_model_42;
-      
+
       KDL::Path_RoundedComposite* path;
       KDL::VelocityProfile* velpref;
       KDL::Trajectory* traject;
@@ -108,28 +107,29 @@ namespace lwr{
       KDL::Jacobian jdot;
       KDL::Twist jdot_qdot;
       double t_traj_curr;
-      
+
       Eigen::Matrix<double,7,1> jnt_pos_eigen;
       Eigen::Matrix<double,7,1> corr_cart;
-      
+
       boost::scoped_ptr<KDL::ChainIkSolverVel_pinv> pinv_solver;
-      
+
       double kp_lin,kd_lin,kp_ang,kd_ang;
       KDL::JntArray qdd_des_kdl;
       Eigen::VectorXd qdd_des,coriolis;
       KDL::JntSpaceInertiaMatrix mass_kdl;
       bool traj_computed;
-      double dx_ang_;
+      double d_ang_max_;
       bool debug_mode_;
       const bool isReadyToStart()const{return ready_to_start_;};
       KDL::Twist d_err_last;
       bool use_jdot_qdot_,use_coriolis_,use_f_ext_,use_xdd_des_;
       int jacobian_solver_type_;
       Eigen::MatrixXd mass_inv;
-      double elapsed;
+      double elapsed,dw_max_;
       bool use_mass_sqrt_;
-      
+      bool use_xd_des_;
+
   };
 }
-ORO_CREATE_COMPONENT(lwr::RttLwrCartImpCtrl)
+ORO_CREATE_COMPONENT(lwr::RttLwrCartCtrl)
 #endif

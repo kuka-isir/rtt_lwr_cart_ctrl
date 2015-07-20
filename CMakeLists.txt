@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(rtt_lwr_cart_imp_ctrl)
-
+project(rtt_lwr_cart_ctrl)
+set(CMAKE_BUILD_TYPE ReleaseWithDebugInfo)
 find_package(catkin REQUIRED COMPONENTS
     rtt_ros
     rtt_rosclock

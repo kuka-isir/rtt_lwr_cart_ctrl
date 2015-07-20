@@ -5,8 +5,8 @@ runScript(ros.find("lwr_fri")+"/runfridiag.ops")
 
 runScript(ros.find("lwr_state_publisher")+"/run_hw.ops")
 
-// Start rtt_lwr_cart_imp_ctrl
-runScript(ros.find("rtt_lwr_cart_imp_ctrl")+"/scripts/run_hw.ops")
-cart_imp_ctrl.start()
+// Start rtt_lwr_cart_ctrl
+runScript(ros.find("rtt_lwr_cart_ctrl")+"/scripts/run_hw.ops")
+cart_ctrl.start()
 
 

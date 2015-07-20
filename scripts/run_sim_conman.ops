@@ -4,7 +4,7 @@ ros.import("rtt_rospack")
 
 runScript(ros.find("rtt_lwr_sim")+"/scripts/lwr_sim.ops")
 
-runScript(ros.find("rtt_lwr_cart_imp_ctrl")+"/scripts/run_sim.ops")
+runScript(ros.find("rtt_lwr_cart_ctrl")+"/scripts/run_sim.ops")
 
 // Load Conman
 loadComponent("scheme","conman::Scheme")
@@ -12,17 +12,17 @@ setActivity("scheme",0.001,LowestPriority,ORO_SCHED_RT)
 scheme.loadService("conman_ros")
 
 connectPeers("scheme","lwr_sim")
-connectPeers("scheme","cart_imp_ctrl")
+connectPeers("scheme","cart_ctrl")
 
 scheme.addBlock("lwr_sim")
-scheme.addBlock("cart_imp_ctrl")
+scheme.addBlock("cart_ctrl")
 
 
 scheme.addGroup("robots")
 scheme.addGroup("controllers")
 
 scheme.addToGroup("lwr_sim","robots")
-scheme.addToGroup("cart_imp_ctrl","controllers")
+scheme.addToGroup("cart_ctrl","controllers")
 
 scheme.latchConnections("robots","controllers",true);
 
@@ -31,6 +31,6 @@ scheme.configure()
 
 scheme.enableBlock("robots",true)
 
-scheme.enableBlock("cart_imp_ctrl",true)
+scheme.enableBlock("cart_ctrl",true)
 
 scheme.start()
