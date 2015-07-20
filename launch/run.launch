@@ -1,0 +1,38 @@
+
+<launch>
+<!--============ ATI F/T Sensor Params ============-->
+
+    <arg name="ft_ip" default="192.168.100.103"/>
+    <arg name="ft_calibration_index" default="-1"/>
+    <arg name="ft_frame" default="/ati_link"/>
+    <arg name="tip_link" default="ati_polaris_link"/>
+    
+    <rosparam ns="ft_sensor" subst_value="true">
+        ip: $(arg ft_ip)
+        calibration_index: $(arg ft_calibration_index)
+        frame: $(arg ft_frame)
+    </rosparam>
+    
+<!--============ LWR Runner script Params ========--> 
+
+    <arg name="sim" default="false" />
+    <arg name="robot_ns" default="/"/>
+    <arg name="debug" default="false" />
+    <arg name="rviz" default="true" />
+    <arg name="log_level" default="warning" />
+    
+
+<!--============ LWR Runner script ===============-->  
+
+    <include file="$(find lwr_launch)/launch/run.launch">
+        <arg name="sim" value="$(arg sim)" />
+        <arg name="ops_script" value="$(find rtt_lwr_cart_ctrl)/scripts/run_hw_standalone.ops" unless="$(arg sim)"/>
+        <arg name="ops_script" value="$(find rtt_lwr_cart_ctrl)/scripts/run_sim_standalone.ops" if="$(arg sim)"/>
+        <arg name="robot_ns" value="$(arg robot_ns)"/>
+        <arg name="debug" value="$(arg debug)" />
+        <arg name="rviz" value="$(arg rviz)" />
+        <arg name="log_level" value="$(arg log_level)" />
+        <arg name="tip_link" default="$(arg tip_link)"/>
+    </include>
+
+</launch>
