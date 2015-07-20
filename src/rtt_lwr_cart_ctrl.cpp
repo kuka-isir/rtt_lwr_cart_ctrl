@@ -1,4 +1,4 @@
-#include "rtt_lwr_cart_ctrl/rtt_lwr_cart_ctrl.hpp"
+    #include "rtt_lwr_cart_ctrl/rtt_lwr_cart_ctrl.hpp"
 #include "eigen_conversions/eigen_msg.h"
 
 #include <unistd.h>
@@ -9,10 +9,10 @@ using namespace KDL;
 
 RttLwrCartCtrl::RttLwrCartCtrl(const std::string& name):
 t_traj_curr(0),
-kp_lin(350.0),
-kp_ang(350.0),
+kp_lin(650.0),
+kp_ang(0.0),
 kd_lin(30.0),
-kd_ang(30.0),
+kd_ang(0.0),
 ready_to_start_(false),
 traj_computed(false),
 debug_mode_(false),
@@ -22,16 +22,17 @@ use_coriolis_(true),
 d_ang_max_(100.0),
 dw_max_(0.5),
 use_xdd_des_(true),
-use_mass_sqrt_(true),
+use_mass_sqrt_(false),
 elapsed(0),
 use_xd_des_(true),
 jacobian_solver_type_(WDL_SOLVER),
 RTTLWRAbstract(name)
 {
-    this->ports()->addPort("PathROS",port_path_ros).doc("");
+//     this->ports()->addPort("PathROS",port_path_ros).doc("");
     this->ports()->addPort("X_curr",port_X_curr).doc("");
     this->ports()->addPort("X_tmp",port_X_tmp).doc("");
     this->ports()->addPort("X_des",port_X_des).doc("");
+    this->ports()->addPort("FTData",port_ftdata).doc("The ATI F/T Sensor Input");
     this->addOperation("publishTrajectory",&RttLwrCartCtrl::publishTrajectory,this,RTT::OwnThread);
     this->addOperation("computeTrajectory",&RttLwrCartCtrl::computeTrajectory,this,RTT::OwnThread);
     this->addAttribute("kp_lin",kp_lin);
@@ -42,24 +43,35 @@ RTTLWRAbstract(name)
     this->addAttribute("dx_ang",d_ang_max_);
     this->addAttribute("debug_mode",debug_mode_);
     this->addAttribute("use_jdot_qdot",use_jdot_qdot_);
-    this->addAttribute("use_f_ext_",use_f_ext_);
+    this->addAttribute("use_f_ext",use_f_ext_);
     this->addAttribute("use_coriolis",use_coriolis_);
     this->addAttribute("use_xd_des",use_xd_des_);
     this->addAttribute("use_xdd_des",use_xdd_des_);
     this->addAttribute("ReadyToStart",ready_to_start_);
     this->addAttribute("jacobian_solver_type",jacobian_solver_type_);
-    this->addAttribute("elapsed",elapsed);
+    this->provides("debug")->addAttribute("elapsed",elapsed);
+    this->provides("debug")->addAttribute("WrenchInBase",F_ext);
     this->addAttribute("use_mass_sqrt",use_mass_sqrt_);
 }
 
 bool RttLwrCartCtrl::configureHook()
 {
-    bool configure = RTTLWRAbstract::configureHook();
+    log(Warning) << "Configuring parent" << endlog();
     
-    jdot_solver.reset(new ChainJntToJacDotSolver(kdl_chain));
+    if(false == RTTLWRAbstract::configureHook())
+    {
+        log(RTT::Fatal) << "Configure parent error" << endlog();
+        return false;
+    }
+    
+    log(Warning) << "Configuring ChainJntToJacDotSolver " << endlog();
+    jdot_solver.reset(new KDL::ChainJntToJacDotSolver(kdl_chain));
+    log(Warning) << "Configuring ChainIkSolverVel_pinv " << endlog();
     pinv_solver.reset(new KDL::ChainIkSolverVel_pinv(kdl_chain));
+    log(Warning) << "Configuring ChainIkSolverVel_wdls " << endlog();
     wdls_solver.reset(new KDL::ChainIkSolverVel_wdls(kdl_chain));
     
+    log(Warning) << "Getting state" << endlog();
     int cnt = 10;
     while(!updateState() && !cnt--)
     {
@@ -67,9 +79,10 @@ bool RttLwrCartCtrl::configureHook()
         usleep(5e5);
     }
     
+    log(Warning) << "setJointTorqueControlMode" << endlog();
     setJointTorqueControlMode();
     
-    
+    log(Warning) << "createStream" << endlog();
     Xd_cmd.setZero();
     X_err.setZero();
     Xd_err.setZero();
@@ -77,11 +90,8 @@ bool RttLwrCartCtrl::configureHook()
     port_X_curr.createStream(rtt_roscomm::topic("~"+getName()+"/pos_curr"));
     port_X_tmp.createStream(rtt_roscomm::topic("~"+getName()+"/pos_tmp"));
     port_X_des.createStream(rtt_roscomm::topic("~"+getName()+"/pos_des"));
+    port_pose_array.createStream(rtt_roscomm::topic("~"+getName()+"/traj_poses"));
     port_path_ros.createStream(rtt_roscomm::topic("~"+getName()+"/cart_traj_des"));
-    
-    
-    fk_vel_solver->JntToCart(jnt_pos_vel_kdl,frame_vel_des_kdl);
-    frame_des_kdl =  frame_vel_des_kdl.GetFrame();
     
     
     qdd_des.resize(kdl_chain.getNrOfJoints());
@@ -90,16 +100,19 @@ bool RttLwrCartCtrl::configureHook()
     coriolis.resize(kdl_chain.getNrOfJoints());
     jnt_pos_eigen.resize(kdl_chain.getNrOfJoints());
     jdot.resize(kdl_chain.getNrOfSegments());
+    J_ati_base.resize(kdl_chain.getNrOfJoints());
+    J_ee_base.resize(kdl_chain.getNrOfJoints());
     // Get initial pose
     getCartesianPosition(cart_pos);
     
     computeTrajectory(0.01,0.05);   
      
     mass_inv.resize(kdl_chain.getNrOfJoints(),kdl_chain.getNrOfJoints());
-    return configure && cnt;
+    return cnt;
 }
-bool RttLwrCartCtrl::computeTrajectory(const double radius, const double eqradius)
+bool RttLwrCartCtrl::computeTrajectory(const double radius, const double eqradius,const double vmax, const double accmax)
 {
+    log(Warning) << "Computing Trajectory" << endlog();
     try
     {
         updateState();
@@ -108,14 +121,16 @@ bool RttLwrCartCtrl::computeTrajectory(const double radius, const double eqradiu
        
         path = new Path_RoundedComposite(radius,eqradius,new RotationalInterpolation_SingleAxis());
         path->Add(frame_des_kdl);
-        path->Add(Frame(Rotation::RPY(88.*deg2rad,        -4.*deg2rad,     -36.*deg2rad),   Vector(-.372,-.427,.505)));
-        path->Add(Frame(Rotation::RPY(91.0*deg2rad,         -3.*deg2rad,   -28.*deg2rad), Vector(-.198,-.557,.695)));
-        path->Add(Frame(Rotation::RPY(89.0*deg2rad,       -17.*deg2rad,   -32.*deg2rad), Vector(-.219,-.625,.404)));
+        path->Add(Frame(Rotation::RPY(99.*deg2rad,        -17.*deg2rad,     -101.*deg2rad),   Vector(-.467,-.448,.576)));
+        path->Add(Frame(Rotation::RPY(99.*deg2rad,        -17.*deg2rad,     -101.*deg2rad),   Vector(-.467,-.448,.376)));
+        /*path->Add(Frame(Rotation::RPY(88.*deg2rad,        -4.*deg2rad,     -36.*deg2rad),   Vector(-.372,-.527,.505)));
+        path->Add(Frame(Rotation::RPY(91.0*deg2rad,         -3.*deg2rad,   -28.*deg2rad), Vector(-.198,-.657,.695)));
+        path->Add(Frame(Rotation::RPY(89.0*deg2rad,       -17.*deg2rad,   -32.*deg2rad), Vector(-.219,-.725,.404)));*/
         path->Add(frame_des_kdl);
         // always call Finish() at the end, otherwise the last segment will not be added.
         path->Finish();
         
-        velpref = new VelocityProfile_Trap(0.1,0.1);
+        velpref = new VelocityProfile_Trap(0.03,0.1);
         velpref->SetProfile(0,path->PathLength());  
         traject = new Trajectory_Segment(path, velpref);
         
@@ -141,7 +156,8 @@ void RttLwrCartCtrl::publishTrajectory()
     nav_msgs::Path path_ros;
     path_ros.header.frame_id = root_link;
     log(Debug) << "Creating Path" << endlog();
-    for (double t=0.0; t <= traject->Duration(); t+= dt) {
+    geometry_msgs::PoseArray pose_array;
+    for (double t=0.0; t <= traject->Duration(); t+= 0.1) {
             Frame current_pose;
             Twist current_vel,current_acc;
             
@@ -152,11 +168,17 @@ void RttLwrCartCtrl::publishTrajectory()
             geometry_msgs::Pose pose;
             geometry_msgs::PoseStamped pose_st;
             tf::poseKDLToMsg(current_pose,pose);
+            pose_array.poses.push_back(pose);
             pose_st.header.frame_id = path_ros.header.frame_id;
             pose_st.pose = pose;
             path_ros.poses.push_back(pose_st);
 
     }
+    
+    pose_array.header.frame_id = path_ros.header.frame_id;
+    pose_array.header.stamp = rtt_rosclock::host_now();
+    
+    port_pose_array.write(pose_array);
     log(Debug) << "Sending Path" << endlog();
     port_path_ros.write(path_ros);
     log(Debug) << "Publishing done" << endlog();
@@ -166,11 +188,8 @@ void RttLwrCartCtrl::updateHook()
 {
     ros::Time t_start = rtt_rosclock::host_now();
     
-    if(!debug_mode_)
-        if(!isCommandMode() || !isReadyToStart())
-            return;
-      
-    if(!updateState() || !getMassMatrix(mass))
+ 
+    if(!updateState() || !getMassMatrix(mass) || !traj_computed)
         return;
 
     Frame X_des,X_mes;
@@ -178,11 +197,27 @@ void RttLwrCartCtrl::updateHook()
     
     X_des = traject->Pos(t_traj_curr);
     
-    // Fk -> X
-    jnt_to_jac_solver->JntToJac(jnt_pos_kdl,J,kdl_chain.getNrOfSegments());
+    // Fk -> X last frame
+    jnt_to_jac_solver->JntToJac(jnt_pos_kdl,J_ati_base,this->seg_names_idx["ati_link"]);
+    
     fk_vel_solver->JntToCart(jnt_pos_vel_kdl,tool_in_base_framevel,kdl_chain.getNrOfSegments());
     X_mes =  tool_in_base_framevel.GetFrame();
     Xd_mes = tool_in_base_framevel.GetTwist();
+    
+    
+    // Get ATi FT DATA
+    
+    if(port_ftdata.read(ft_data) == RTT::NoData)
+    {
+        log(RTT::Error) << "No info from sensor" << endlog();
+        return;
+    }
+    tf::wrenchMsgToKDL(ft_data.wrench, ft_wrench_kdl);
+    //ft_wrench_kdl = X_mes * ft_wrench_kdl;
+    tf::wrenchKDLToEigen(ft_wrench_kdl,F_ext);
+    /// Put it in base frame
+    
+    
     
     // Flex Models
     jnt_pos_eigen = jnt_pos_kdl.data;
@@ -263,15 +298,11 @@ void RttLwrCartCtrl::updateHook()
             ret = pinv_solver->CartToJnt(jnt_pos_kdl,Xdd_des,qdd_des_kdl);
             break;
         case WDL_SOLVER:
-            log(Debug) <<"mass_inv"<< mass_inv << endlog();
-            log(Debug) <<"mass"<< mass << endlog();
             if(use_mass_sqrt_)
-                mass_inv =  mass.sqrt();
+                wdls_solver->setWeightJS(mass.sqrt());
             else
-                mass_inv = mass.inverse();
-            log(Debug) <<"mass_inv"<< mass_inv << endlog();
-            log(Debug) <<"jnt_pos_kdl"<< jnt_pos_kdl << endlog();
-            wdls_solver->setWeightJS(mass_inv);
+                wdls_solver->setWeightJS(mass.inverse());
+            
             ret = wdls_solver->CartToJnt(jnt_pos_kdl,Xdd_des,qdd_des_kdl);
             break;
         default:
@@ -283,26 +314,28 @@ void RttLwrCartCtrl::updateHook()
     
     id_dyn_solver->JntToCoriolis(jnt_pos_kdl,jnt_vel_kdl,coriolis_kdl);
     
-    F_ext.setZero();
-    // Du capteur effort, à remettre dans le repère Monde;
-    
     jnt_trq_cmd = mass*qdd_des_kdl.data;
     if(use_f_ext_)
-        jnt_trq_cmd += J.data.transpose() * F_ext;
+        jnt_trq_cmd += J_ati_base.data.transpose() * F_ext;
     if(use_coriolis_)
         jnt_trq_cmd += coriolis_kdl.data;
     
+    log(Debug) <<"Sensor "<< ft_wrench_kdl << endlog();
     log(Debug) << "trqcmd " << jnt_trq_cmd.transpose() << endlog();
     
     if(!debug_mode_)
+        if(!isCommandMode())
+            return;
+        
         sendJointTorque(jnt_trq_cmd);
     
     // Incremente traj
-    if( t_traj_curr <= traject->Duration())
-        t_traj_curr += static_cast<double>(this->getPeriod());
-    else
-        t_traj_curr = 0.0;
-    
+    if(isReadyToStart()){
+        if( t_traj_curr <= traject->Duration())
+            t_traj_curr += static_cast<double>(this->getPeriod());
+        else
+            t_traj_curr = 0.0;
+    }
     ros::Duration t_elapsed = rtt_rosclock::host_now() - t_start;
     elapsed = t_elapsed.toSec();
 }

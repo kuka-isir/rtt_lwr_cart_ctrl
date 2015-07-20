@@ -1,8 +1,15 @@
 // Start LWR
 import("rtt_ros")
 ros.import("rtt_rospack")
+
+// ATI F/T Sensor
+runScript(ros.find("rtt_ati_sensor")+"/scripts/ft_sensor.ops")
+
+// LWR FRI
 runScript(ros.find("lwr_fri")+"/runfridiag.ops")
 
+
+// State Publisher
 runScript(ros.find("lwr_state_publisher")+"/run_hw.ops")
 
 // Start rtt_lwr_cart_ctrl

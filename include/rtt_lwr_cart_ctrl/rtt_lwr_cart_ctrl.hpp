@@ -47,6 +47,8 @@
 #include <kdl/chainiksolvervel_wdls.hpp>
 
 #include <unsupported/Eigen/MatrixFunctions>
+#include <geometry_msgs/WrenchStamped.h>
+#include <geometry_msgs/PoseArray.h>
 
 template <typename T>
 T clip(const T& n, const T& lower, const T& upper) {
@@ -71,12 +73,14 @@ namespace lwr{
       virtual ~RttLwrCartCtrl(){
           delete ctraject;
     };
-      bool computeTrajectory(const double radius,const double eqradius);
+      bool computeTrajectory(const double radius,const double eqradius,const double vmax=0.02, const double accmax=0.1);
       void updateHook();
       bool configureHook();
       RTT::OutputPort<geometry_msgs::PoseStamped> port_X_curr;
       RTT::OutputPort<geometry_msgs::PoseStamped> port_X_des;
       RTT::OutputPort<geometry_msgs::PoseStamped> port_X_tmp;
+      RTT::OutputPort<geometry_msgs::PoseArray> port_pose_array;
+      RTT::InputPort<geometry_msgs::WrenchStamped> port_ftdata;
       RTT::OutputPort<nav_msgs::Path> port_path_ros;
 
     protected:
@@ -104,7 +108,7 @@ namespace lwr{
       void publishTrajectory();
       boost::scoped_ptr<KDL::ChainJntToJacDotSolver> jdot_solver;
       boost::scoped_ptr<KDL::ChainIkSolverVel_wdls> wdls_solver;
-      KDL::Jacobian jdot;
+      KDL::Jacobian jdot,J_ati_base,J_ee_base;
       KDL::Twist jdot_qdot;
       double t_traj_curr;
 
@@ -128,6 +132,9 @@ namespace lwr{
       double elapsed,dw_max_;
       bool use_mass_sqrt_;
       bool use_xd_des_;
+      geometry_msgs::WrenchStamped ft_data;
+      Eigen::Matrix<double,6,1> ft_wrench;
+      KDL::Wrench ft_wrench_kdl;
 
   };
 }
