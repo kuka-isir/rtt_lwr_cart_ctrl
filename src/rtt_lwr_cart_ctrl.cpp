@@ -25,6 +25,7 @@ use_xdd_des_(true),
 use_mass_sqrt_(false),
 elapsed(0),
 use_xd_des_(true),
+use_ft_sensor_(false),
 jacobian_solver_type_(WDL_SOLVER),
 RTTLWRAbstract(name)
 {
@@ -52,6 +53,7 @@ RTTLWRAbstract(name)
     this->provides("debug")->addAttribute("elapsed",elapsed);
     this->provides("debug")->addAttribute("WrenchInBase",F_ext);
     this->addAttribute("use_mass_sqrt",use_mass_sqrt_);
+    this->addAttribute("use_ft_sensor",use_ft_sensor_);
 }
 
 bool RttLwrCartCtrl::configureHook()
@@ -207,7 +209,7 @@ void RttLwrCartCtrl::updateHook()
     
     // Get ATi FT DATA
     
-    if(port_ftdata.read(ft_data) == RTT::NoData)
+    if(port_ftdata.read(ft_data) == RTT::NoData && use_ft_sensor_)
     {
         log(RTT::Error) << "No info from sensor" << endlog();
         return;

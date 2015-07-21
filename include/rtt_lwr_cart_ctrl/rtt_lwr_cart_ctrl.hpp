@@ -126,7 +126,7 @@ namespace lwr{
       bool debug_mode_;
       const bool isReadyToStart()const{return ready_to_start_;};
       KDL::Twist d_err_last;
-      bool use_jdot_qdot_,use_coriolis_,use_f_ext_,use_xdd_des_;
+      bool use_jdot_qdot_,use_coriolis_,use_f_ext_,use_xdd_des_,use_ft_sensor_;
       int jacobian_solver_type_;
       Eigen::MatrixXd mass_inv;
       double elapsed,dw_max_;
