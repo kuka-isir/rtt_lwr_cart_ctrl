@@ -25,7 +25,8 @@ use_xdd_des_(true),
 use_mass_sqrt_(false),
 elapsed(0),
 use_xd_des_(true),
-use_ft_sensor_(false),
+use_ft_sensor_(true),
+use_flex_models_(true),
 jacobian_solver_type_(WDL_SOLVER),
 RTTLWRAbstract(name)
 {
@@ -54,6 +55,7 @@ RTTLWRAbstract(name)
     this->provides("debug")->addAttribute("WrenchInBase",F_ext);
     this->addAttribute("use_mass_sqrt",use_mass_sqrt_);
     this->addAttribute("use_ft_sensor",use_ft_sensor_);
+    this->addAttribute("use_flex_models",use_flex_models_);
 }
 
 bool RttLwrCartCtrl::configureHook()
@@ -90,6 +92,7 @@ bool RttLwrCartCtrl::configureHook()
     Xd_err.setZero();
     
     port_X_curr.createStream(rtt_roscomm::topic("~"+getName()+"/pos_curr"));
+    port_X_corr.createStream(rtt_roscomm::topic("~"+getName()+"/pos_corr"));
     port_X_tmp.createStream(rtt_roscomm::topic("~"+getName()+"/pos_tmp"));
     port_X_des.createStream(rtt_roscomm::topic("~"+getName()+"/pos_des"));
     port_pose_array.createStream(rtt_roscomm::topic("~"+getName()+"/traj_poses"));
@@ -219,27 +222,28 @@ void RttLwrCartCtrl::updateHook()
     tf::wrenchKDLToEigen(ft_wrench_kdl,F_ext);
     /// Put it in base frame
     
-    
+    double estimated_mass = ft_wrench_kdl.force.Norm();
     
     // Flex Models
-    jnt_pos_eigen = jnt_pos_kdl.data;
-    flex_model_12.compute(jnt_pos_eigen,0.0);
-    corr_cart = flex_model_12.corr_trans_rot;
-    KDL::Frame X_corr(Rotation::Quaternion(corr_cart[3],corr_cart[4],corr_cart[5],corr_cart[6]),
-        Vector(corr_cart[0],corr_cart[1],corr_cart[2]));
-    // Xdd Des
+    Frame X_curr;
+    KDL::Frame X_corr = KDL::Frame::Identity();
+    if(use_flex_models_)
+    {
+        jnt_pos_eigen = jnt_pos_kdl.data;
+        flex_model_12.compute(jnt_pos_eigen,estimated_mass,corr_cart);
+        
+        Rotation dr_corr_ = Rotation::Quaternion(corr_cart[3],corr_cart[4],corr_cart[5],corr_cart[6]);
+        Twist corr(Vector(corr_cart[0]/1000.0,corr_cart[1]/1000.0,corr_cart[2]/1000.0),dr_corr_.GetRot());
 
-    //Twist d_curr = diff(X_corr,X_mes);
-    
-    //Frame X_curr = KDL::addDelta(X_mes,d_curr,d_ang_max_*static_cast<double>(getPeriod()));
-    
-    Frame X_curr = X_mes;
-    
-    Twist d_err = diff(X_curr,X_des);    
+        log(RTT::Debug) << "corr_cart : " << corr_cart.transpose() << endlog();
 
-    /*d_err.rot = dw_max_ * (X_des.M.UnitX() * X_curr.M.UnitX() +
-                           X_des.M.UnitY() * X_curr.M.UnitY() +
-                           X_des.M.UnitZ() * X_curr.M.UnitZ());*/
+        X_corr = addDelta(X_mes,corr);
+        
+        X_curr = X_corr;
+    }else{
+        X_curr = X_mes;
+    }
+    Twist d_err = diff(X_curr,X_des);
     
     Frame X_tmp(X_curr);
     X_tmp.M = Rotation::Rot(d_err.rot,d_err.rot.Norm()) * X_tmp.M;
@@ -247,21 +251,10 @@ void RttLwrCartCtrl::updateHook()
     if(1)
     {
         // Ros pub
-       X_curr_msg.header.frame_id = 
-            X_tmp_msg.header.frame_id = 
-            X_des_msg.header.frame_id = root_link;
-            
-       X_curr_msg.header.stamp = 
-            X_tmp_msg.header.stamp = 
-            X_des_msg.header.stamp = rtt_rosclock::host_now();
-            
-       tf::poseKDLToMsg(X_curr,X_curr_msg.pose);
-       tf::poseKDLToMsg(X_tmp,X_tmp_msg.pose);
-       tf::poseKDLToMsg(X_des,X_des_msg.pose);
-       
-       port_X_curr.write(X_curr_msg);
-       port_X_tmp.write(X_tmp_msg);
-       port_X_des.write(X_des_msg);
+       publishFrame(port_X_curr,X_mes,root_link);
+       publishFrame(port_X_tmp,X_tmp,root_link);
+       publishFrame(port_X_des,X_des,root_link);
+       publishFrame(port_X_corr,X_corr,root_link);
     }
             
     if(use_xd_des_)

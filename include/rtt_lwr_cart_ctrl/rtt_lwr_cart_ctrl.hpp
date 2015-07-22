@@ -49,6 +49,7 @@
 #include <unsupported/Eigen/MatrixFunctions>
 #include <geometry_msgs/WrenchStamped.h>
 #include <geometry_msgs/PoseArray.h>
+#include <geometry_msgs/Vector3Stamped.h>
 
 template <typename T>
 T clip(const T& n, const T& lower, const T& upper) {
@@ -62,6 +63,14 @@ namespace KDL{
     }
 }
 
+inline void publishFrame(RTT::OutputPort<geometry_msgs::PoseStamped>& port_out,const KDL::Frame& f,const std::string& frame_id)
+{
+    geometry_msgs::PoseStamped p;
+    tf::poseKDLToMsg(f,p.pose);
+    p.header.frame_id = frame_id;
+    p.header.stamp = rtt_rosclock::host_now();
+    port_out.write(p);
+}
 
 namespace lwr{
   static const int PINV_SOLVER  =0;
@@ -80,6 +89,7 @@ namespace lwr{
       RTT::OutputPort<geometry_msgs::PoseStamped> port_X_des;
       RTT::OutputPort<geometry_msgs::PoseStamped> port_X_tmp;
       RTT::OutputPort<geometry_msgs::PoseArray> port_pose_array;
+      RTT::OutputPort<geometry_msgs::PoseStamped> port_X_corr;
       RTT::InputPort<geometry_msgs::WrenchStamped> port_ftdata;
       RTT::OutputPort<nav_msgs::Path> port_path_ros;
 
@@ -126,7 +136,14 @@ namespace lwr{
       bool debug_mode_;
       const bool isReadyToStart()const{return ready_to_start_;};
       KDL::Twist d_err_last;
-      bool use_jdot_qdot_,use_coriolis_,use_f_ext_,use_xdd_des_,use_ft_sensor_;
+      
+      bool use_jdot_qdot_,
+            use_coriolis_,
+            use_f_ext_,
+            use_xdd_des_,
+            use_ft_sensor_,
+            use_flex_models_;
+            
       int jacobian_solver_type_;
       Eigen::MatrixXd mass_inv;
       double elapsed,dw_max_;
