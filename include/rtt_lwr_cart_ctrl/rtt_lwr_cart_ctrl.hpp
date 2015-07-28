@@ -75,6 +75,7 @@ inline void publishFrame(RTT::OutputPort<geometry_msgs::PoseStamped>& port_out,c
 namespace lwr{
   static const int PINV_SOLVER  =0;
   static const int WDL_SOLVER   =1;
+  static const int JACOBIAN_TRANSPOSE = 2;
 
   class RttLwrCartCtrl : public RTTLWRAbstract{
     public:
@@ -85,24 +86,32 @@ namespace lwr{
       bool computeTrajectory(const double radius,const double eqradius,const double vmax=0.02, const double accmax=0.1);
       void updateHook();
       bool configureHook();
+      void setGains(const double kp_lin,const double kp_ang,const double kd_lin,const double kd_ang);
+      
       RTT::OutputPort<geometry_msgs::PoseStamped> port_X_curr;
       RTT::OutputPort<geometry_msgs::PoseStamped> port_X_des;
       RTT::OutputPort<geometry_msgs::PoseStamped> port_X_tmp;
       RTT::OutputPort<geometry_msgs::PoseArray> port_pose_array;
       RTT::OutputPort<geometry_msgs::PoseStamped> port_X_corr;
       RTT::InputPort<geometry_msgs::WrenchStamped> port_ftdata;
+      RTT::OutputPort<geometry_msgs::WrenchStamped> port_wrench_world;
       RTT::OutputPort<nav_msgs::Path> port_path_ros;
-
+      RTT::OutputPort<sensor_msgs::JointState> port_js;
+      
     protected:
+      sensor_msgs::JointState js_cmd;
       geometry_msgs::PoseStamped X_curr_msg,X_des_msg,X_tmp_msg;
-      bool ready_to_start_;
-      double gain_;
+      bool ready_to_start_,use_nso_;
+      double gain_,damping_;
       KDL::Frame frame_des_kdl;
       Eigen::Matrix<double,6,1> X_err,Xd_err;
+      Eigen::MatrixXd I;
+      Eigen::MatrixXd J_pm,Jt;
       KDL::Frame frame_kdl;
       KDL::FrameVel frame_vel_des_kdl;
       tf::Pose cart_pos_tf,cart_pos_tf_des;
       KDL::Wrench wrench_kdl;
+      geometry_msgs::WrenchStamped w_msg;
       KDL::JntArray jnt_acc_kdl;
       Eigen::Matrix<double,6,1> F_ext;
       KDL::Twist cart_twist_des_kdl;
@@ -128,7 +137,7 @@ namespace lwr{
       boost::scoped_ptr<KDL::ChainIkSolverVel_pinv> pinv_solver;
 
       double kp_lin,kd_lin,kp_ang,kd_ang;
-      KDL::JntArray qdd_des_kdl;
+      KDL::JntArray qdd_des_kdl,jnt_zero;
       Eigen::VectorXd qdd_des,coriolis;
       KDL::JntSpaceInertiaMatrix mass_kdl;
       bool traj_computed;
@@ -146,12 +155,14 @@ namespace lwr{
             
       int jacobian_solver_type_;
       Eigen::MatrixXd mass_inv;
-      double elapsed,dw_max_;
+      Eigen::VectorXd jnt_pos_ref_;
+      double elapsed,dw_max_,kp_ref_;
       bool use_mass_sqrt_;
-      bool use_xd_des_;
+      bool use_xd_des_,use_damping_;
       geometry_msgs::WrenchStamped ft_data;
       Eigen::Matrix<double,6,1> ft_wrench;
       KDL::Wrench ft_wrench_kdl;
+      Eigen::VectorXd kt_;
 
   };
 }
