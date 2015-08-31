@@ -25,7 +25,7 @@ use_xdd_des_(true),
 use_mass_sqrt_(false),
 elapsed(0),
 use_xd_des_(true),
-use_ft_sensor_(true),
+use_ft_sensor_(false),
 use_flex_models_(false),
 use_damping_(true),
 use_nso_(false),
@@ -66,26 +66,26 @@ RTTLWRAbstract(name)
 
 bool RttLwrCartCtrl::configureHook()
 {
-    log(Warning) << "Configuring parent" << endlog();
-    boost::shared_ptr<rtt_rosparam::ROSParam> rosparam =
-          this->getProvider<rtt_rosparam::ROSParam>("rosparam");
-    if(rosparam) {
-        const RTT::PropertyBag::Properties &properties =  this->properties()->getProperties();
+    log(RTT::Warning) << "Configuring parent" << &kdl_chain << endlog();
 
-        for(RTT::PropertyBag::Properties::const_iterator it = properties.begin();
-            it != properties.end();
-            ++it)
-        {
-            log(Info) << "RosParams :  "<< endlog();
-            if(rosparam->getParam(getName() +"/"+(*it)->getName(),(*it)->getName()))
-                log(Info) << getName() +"/"+(*it)->getName() << " => "<< this->getProperty((*it)->getName())<< endlog();
-        }
-    }
-    if(false == RTTLWRAbstract::configureHook())
+    if(!this->init())
     {
-        log(RTT::Fatal) << "Configure parent error" << endlog();
+        log(RTT::Error) << "Configure parent error" << endlog();
         return false;
     }
+    if(kdl_chain.getNrOfSegments() == 0){
+        log(RTT::Error) << "KDL Chain is invalid" << endlog();
+        return false;
+    }
+
+    log(Warning) << "Parent Configured" << &kdl_chain << endlog();
+    
+    rtt_ros_kdl_tools::printChain(kdl_chain);
+    log(Warning) << "Parent Configured" << &kdl_chain << endlog();
+    this->getAllComponentRelative();
+
+    RTT::log(RTT::Warning) << "- KDL Chain Joints : " << kdl_chain.getNrOfJoints()<< RTT::endlog();
+    RTT::log(RTT::Warning) << "- KDL Chain Segments : " << kdl_chain.getNrOfSegments()<< RTT::endlog();
     
     log(Warning) << "Configuring ChainJntToJacDotSolver " << endlog();
     jdot_solver.reset(new KDL::ChainJntToJacDotSolver(kdl_chain));
@@ -105,13 +105,15 @@ bool RttLwrCartCtrl::configureHook()
     log(Warning) << "setJointTorqueControlMode" << endlog();
     setJointTorqueControlMode();
     
-    log(Warning) << "createStream" << endlog();
+    log(Warning) << "init vars" << endlog();
     Xd_cmd.setZero();
     X_err.setZero();
     Xd_err.setZero();
     
-    rtt_ros_kdl_tools::initJointStateFromKDLCHain(kdl_chain,js_cmd);
+    log(Warning) << "Create Joint State msg" << endlog();
+    js_cmd = rtt_ros_kdl_tools::initJointStateFromKDLCHain(kdl_chain);
     
+    log(Warning) << "createStreams" << endlog();
     port_X_curr.createStream(rtt_roscomm::topic("~"+getName()+"/pos_curr"));
     port_X_corr.createStream(rtt_roscomm::topic("~"+getName()+"/pos_corr"));
     port_X_tmp.createStream(rtt_roscomm::topic("~"+getName()+"/pos_tmp"));
@@ -121,51 +123,53 @@ bool RttLwrCartCtrl::configureHook()
     port_js.createStream(rtt_roscomm::topic("~"+getName()+"/joint_cmd"));
     port_wrench_world.createStream(rtt_roscomm::topic("~"+getName()+"/wrench_world"));
     
-    qdd_des.resize(kdl_chain.getNrOfJoints());
-    mass_kdl.resize(kdl_chain.getNrOfJoints());
-    qdd_des_kdl.resize(kdl_chain.getNrOfJoints());
-    coriolis.resize(kdl_chain.getNrOfJoints());
-    jnt_pos_eigen.resize(kdl_chain.getNrOfJoints());
+    unsigned int k=0;
+    unsigned int ndof = kdl_chain.getNrOfJoints();
+
+    
+    qdd_des.resize(ndof);
+    mass_kdl.resize(ndof);
+    qdd_des_kdl.resize(ndof);
+    coriolis.resize(ndof);
+    jnt_pos_eigen.resize(ndof);
     jdot.resize(kdl_chain.getNrOfSegments());
-    J_ati_base.resize(kdl_chain.getNrOfJoints());
-    J_ee_base.resize(kdl_chain.getNrOfJoints());
-    jnt_zero.resize(kdl_chain.getNrOfJoints());
+    J_ati_base.resize(ndof);
+    J_ee_base.resize(ndof);
+    jnt_zero.resize(ndof);
     SetToZero(jnt_zero);
-    mass_kdl.resize(kdl_chain.getNrOfJoints());
-    kt_.resize(kdl_chain.getNrOfJoints());
+    kt_.resize(ndof);
     kt_.setConstant(1.0);
     
-    I.resize(kdl_chain.getNrOfJoints(),kdl_chain.getNrOfJoints());
+    I.resize(ndof,ndof);
     I.setIdentity();
     
-    J_pm.resize(kdl_chain.getNrOfJoints(),6);
+    J_pm.resize(ndof,6);
     J_pm.setZero();
     
-    Jt.resize(kdl_chain.getNrOfJoints(),6);
+    Jt.resize(ndof,6);
     Jt.setZero();
     
     // Get initial pose
     
     jnt_pos_ref_ = jnt_pos;
-    
-    getCartesianPosition(cart_pos);
-    
-    computeTrajectory(0.01,0.05);   
      
-    mass_inv.resize(kdl_chain.getNrOfJoints(),kdl_chain.getNrOfJoints());
+    mass_inv.resize(ndof,ndof);
     
     
     log(Warning) << "IDX for the ft sensor is "<< this->seg_names_idx["ati_link"] << endlog();
     
-    
-    return cnt;
+    traj_computed = computeTrajectory(0.01,0.05);
+
+    return cnt>0;
 }
 bool RttLwrCartCtrl::computeTrajectory(const double radius, const double eqradius,const double vmax, const double accmax)
 {
-    log(Warning) << "Computing Trajectory" << endlog();
+    
     try
     {
-        updateState();
+        if(!updateState())
+            return false;
+        log(Warning) << "Computing Trajectory" << endlog();
         fk_vel_solver->JntToCart(jnt_pos_vel_kdl,frame_vel_des_kdl,kdl_chain.getNrOfSegments());
         frame_des_kdl =  frame_vel_des_kdl.GetFrame();
        
@@ -198,7 +202,6 @@ bool RttLwrCartCtrl::computeTrajectory(const double radius, const double eqradiu
     
     log(Info) << "Trajectory computed ! " << endlog();
     publishTrajectory();
-    traj_computed = true;
     return true;
 }
 
@@ -246,15 +249,16 @@ void RttLwrCartCtrl::setGains(const double kp_lin, const double kp_ang, const do
 void RttLwrCartCtrl::updateHook()
 {
     ros::Time t_start = rtt_rosclock::host_now();
- 
-    if(!updateState() || !getMassMatrix(mass) || !traj_computed)
+    log(RTT::Debug) << "t_start : " << t_start << endlog();
+
+    if(!updateState() || !traj_computed)
         return;
 
-    log(RTT::Debug) << "Mass matrix : \n        " << mass << endlog();
+    //log(RTT::Debug) << "Mass matrix : \n        " << mass << endlog();
     
     id_dyn_solver->JntToMass(jnt_pos_kdl,mass_kdl);
     
-    log(RTT::Debug) << "Mass matrix KDL : \n        " << mass_kdl.data << endlog();
+    //log(RTT::Debug) << "Mass matrix KDL : \n        " << mass_kdl.data << endlog();
     
     Frame X_des,X_mes;
     Twist Xdd_des,Xd_mes,Xd_des;
@@ -323,7 +327,7 @@ void RttLwrCartCtrl::updateHook()
     Frame X_tmp(X_curr);
     X_tmp.M = Rotation::Rot(d_err.rot,d_err.rot.Norm()) * X_tmp.M;
     
-    if(1)
+    if((double)getPeriod()/100.0)
     {
         // Ros pub
        publishFrame(port_X_curr,X_mes,root_link);
@@ -352,13 +356,15 @@ void RttLwrCartCtrl::updateHook()
     
     Xdd_des.rot = dr + kd_ang*(dd_err.rot);
     
+    log(RTT::Debug) << "Xdd_des : " << Xdd_des << endlog();
+
     // Jdot*qdot
     jdot_solver->JntToJacDot(jnt_pos_vel_kdl,jdot_qdot,kdl_chain.getNrOfSegments());
     
     if(use_jdot_qdot_)
         Xdd_des -= jdot_qdot;
     
-    log(RTT::Debug) << "dr : " << dr << endlog();
+    log(RTT::Debug) << "Xdd_des : " << Xdd_des << endlog();
     
     if(use_xdd_des_)
         Xdd_des += traject->Acc(t_traj_curr);
@@ -372,9 +378,9 @@ void RttLwrCartCtrl::updateHook()
             break;
         case WDL_SOLVER:
             if(use_mass_sqrt_)
-                wdls_solver->setWeightJS(mass.sqrt());
+                wdls_solver->setWeightJS(mass_kdl.data.sqrt());
             else
-                wdls_solver->setWeightJS(mass.inverse());
+                wdls_solver->setWeightJS(mass_kdl.data.inverse());
             
             ret = wdls_solver->CartToJnt(jnt_pos_kdl,Xdd_des,qdd_des_kdl);
             break;
@@ -388,9 +394,9 @@ void RttLwrCartCtrl::updateHook()
     
     if(use_nso_){
         if(jacobian_solver_type_ ==  JACOBIAN_TRANSPOSE)
-            mass_inv = mass.inverse();
+            mass_inv = mass_kdl.data.inverse();
         else
-           mass_inv = (mass*mass).inverse(); 
+           mass_inv = (mass_kdl.data*mass_kdl.data).inverse(); 
         
         log(RTT::Debug) << "mass_inv matrix : \n" << mass_inv << endlog();
         
@@ -409,7 +415,7 @@ void RttLwrCartCtrl::updateHook()
     if(jacobian_solver_type_ ==  JACOBIAN_TRANSPOSE)
         jnt_trq_cmd = J_ati_base.data.transpose() * (xdd_des);
     else
-        jnt_trq_cmd = mass*qdd_des_kdl.data;
+        jnt_trq_cmd = mass_kdl.data*qdd_des_kdl.data;
     
     
     if(use_nso_)
@@ -417,7 +423,7 @@ void RttLwrCartCtrl::updateHook()
         if(jacobian_solver_type_ ==  JACOBIAN_TRANSPOSE)
             jnt_trq_cmd += (I - J_ati_base.data.transpose() * J_pm.transpose())  * (kp_ref_*(jnt_pos_ref_ - jnt_pos) - damping_ * jnt_vel);
         else
-           jnt_trq_cmd += (I - J_ati_base.data.transpose() * J_pm.transpose())  * mass * (kp_ref_*(jnt_pos_ref_ - jnt_pos) - damping_ * jnt_vel); 
+           jnt_trq_cmd += (I - J_ati_base.data.transpose() * J_pm.transpose())  * mass_kdl.data * (kp_ref_*(jnt_pos_ref_ - jnt_pos) - damping_ * jnt_vel); 
     }
     
     

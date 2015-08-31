@@ -98,7 +98,6 @@ namespace lwr{
       RTT::OutputPort<nav_msgs::Path> port_path_ros;
       RTT::OutputPort<sensor_msgs::JointState> port_js;
       
-    protected:
       sensor_msgs::JointState js_cmd;
       geometry_msgs::PoseStamped X_curr_msg,X_des_msg,X_tmp_msg;
       bool ready_to_start_,use_nso_;
