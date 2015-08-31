@@ -22,7 +22,7 @@
     <arg name="log_level" default="warning" />
  
 <!--============ Cartesian Controller Params =====--> 
-    <rosparam ns="cart_ctrl" subst_value="true">
+    <rosparam unless="$(arg sim)" ns="cart_ctrl" subst_value="true">
         kp_lin: 1500.0
         kd_lin: 50.0
         kp_ang: 200.0
@@ -39,6 +39,29 @@
         use_mass_sqrt: false
         use_ft_sensor: true
         use_flex_models: true
+        use_damping: false
+        use_nso: false
+        kp_ref: 100.0
+        damping: 10.0
+    </rosparam>
+<!--============ Cartesian Controller Params (SIM) =====--> 
+    <rosparam if="$(arg sim)" ns="cart_ctrl" subst_value="true">
+        kp_lin: 1500.0
+        kd_lin: 50.0
+        kp_ang: 200.0
+        kd_ang: 5.0
+        dx_ang_max: 100.0
+        dw_max: 0.1
+        use_jdot_qdot: true
+        use_f_ext: true
+        use_coriolis: true
+        use_xd_des: true
+        use_coriolis: true
+        use_xdd_des: true
+        jacobian_solver_type: 1
+        use_mass_sqrt: false
+        use_ft_sensor: false
+        use_flex_models: false
         use_damping: false
         use_nso: false
         kp_ref: 100.0
