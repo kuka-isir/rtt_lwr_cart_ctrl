@@ -10,7 +10,8 @@ runScript(ros.find("lwr_fri")+"/runfridiag.ops")
 
 
 // State Publisher
-runScript(ros.find("lwr_state_publisher")+"/run_hw.ops")
+runScript(ros.find("rtt_state_publisher")+"/scripts/run_hw.ops")
+state_pub.start()
 
 // Start rtt_lwr_cart_ctrl
 runScript(ros.find("rtt_lwr_cart_ctrl")+"/scripts/run_hw.ops")
