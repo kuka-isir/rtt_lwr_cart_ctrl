@@ -41,11 +41,6 @@ include_directories(
 orocos_component(${PROJECT_NAME} src/${PROJECT_NAME}.cpp)
 set_property(TARGET ${PROJECT_NAME} APPEND PROPERTY COMPILE_DEFINITIONS RTT_COMPONENT)
 
-# Just for Hydro compatibility
-list(REMOVE_ITEM catkin_LIBRARIES lwr_fri_generate_messages_cpp)
-list(REMOVE_ITEM catkin_LIBRARIES lwr_fri_generate_messages_lisp)
-list(REMOVE_ITEM catkin_LIBRARIES lwr_fri_generate_messages_py)
-
 target_link_libraries(${PROJECT_NAME}
     ${catkin_LIBRARIES}
     ${USE_OROCOS_LIBRARIES}
