@@ -4,6 +4,6 @@ loadComponent("cart_ctrl","lwr::RttLwrCartCtrl")
 setActivity("cart_ctrl",0.001,LowestPriority,ORO_SCHED_RT)
 connectPeers("cart_ctrl","lwr_sim")
 
-lwr_sim.setInitialJointPosition(array(1.0,0.,0.0,-1.57,0.0,1.57,0.))
+//lwr_sim.setInitialJointPosition(array(1.0,0.,0.0,-1.57,0.0,1.57,0.))
 
 cart_ctrl.configure()

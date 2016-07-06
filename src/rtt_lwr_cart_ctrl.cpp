@@ -290,7 +290,7 @@ void RttLwrCartCtrl::updateHook()
     KDL::Frame X_corr = KDL::Frame::Identity();
     if(use_flex_models_)
     {
-        fk_vel_solver->JntToCart(jnt_pos_vel_kdl,tool_in_base_framevel,seg_names_idx["ati_link"]);
+/*        fk_vel_solver->JntToCart(jnt_pos_vel_kdl,tool_in_base_framevel,seg_names_idx["ati_link"]);
     
         KDL::Wrench w = tool_in_base_framevel.GetFrame().M * ft_wrench_kdl;
 
@@ -311,7 +311,7 @@ void RttLwrCartCtrl::updateHook()
 
         X_corr = addDelta(X_mes,-corr);
             
-        X_curr = X_corr;
+        X_curr = X_corr;*/
     }else{
         X_curr = X_mes;
         X_corr = X_mes;

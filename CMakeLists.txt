@@ -17,9 +17,8 @@ find_package(catkin REQUIRED COMPONENTS
     lwr_fri
     rtt_lwr_abstract
     cmake_modules
-    conman
     rtt_ros_kdl_tools
-    lwr_flex_models
+#    lwr_flex_models
     nav_msgs
 )
 

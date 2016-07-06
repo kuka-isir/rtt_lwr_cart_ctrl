@@ -69,7 +69,7 @@
     </rosparam>
 <!--============ LWR Runner script ===============-->  
 
-    <include file="$(find lwr_launch)/launch/run.launch">
+    <include file="$(find lwr_utils)/launch/run.launch">
         <arg name="sim" value="$(arg sim)" />
         <arg name="ops_script" value="$(find rtt_lwr_cart_ctrl)/scripts/run_hw_standalone.ops" unless="$(arg sim)"/>
         <arg name="ops_script" value="$(find rtt_lwr_cart_ctrl)/scripts/run_sim_standalone.ops" if="$(arg sim)"/>

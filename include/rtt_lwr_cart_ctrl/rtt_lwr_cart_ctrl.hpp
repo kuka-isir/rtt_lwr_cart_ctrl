@@ -37,9 +37,9 @@
 #include <kdl/utilities/error.h>
 #include <kdl/trajectory_composite.hpp>
 
-#include <lwr_flex_models/flex_model_12.h>
-#include <lwr_flex_models/flex_model_23.h>
-#include <lwr_flex_models/flex_model_42.h>
+//#include <lwr_flex_models/flex_model_12.h>
+//#include <lwr_flex_models/flex_model_23.h>
+//#include <lwr_flex_models/flex_model_42.h>
 
 #include <nav_msgs/Path.h>
 #include <rtt_ros_kdl_tools/chainjnttojacdotsolver.hpp>
@@ -115,9 +115,9 @@ namespace lwr{
       Eigen::Matrix<double,6,1> F_ext;
       KDL::Twist cart_twist_des_kdl;
 
-      flexmod12 flex_model_12;
-      flexmod23 flex_model_23;
-      flexmod42 flex_model_42;
+//      flexmod12 flex_model_12;
+//      flexmod23 flex_model_23;
+//      flexmod42 flex_model_42;
 
       KDL::Path_RoundedComposite* path;
       KDL::VelocityProfile* velpref;
